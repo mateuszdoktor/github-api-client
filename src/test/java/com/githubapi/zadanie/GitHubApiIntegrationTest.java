@@ -2,6 +2,7 @@ package com.githubapi.zadanie;
 
 import java.util.List;
 
+import org.apache.commons.lang3.time.StopWatch;
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -17,8 +18,10 @@ import org.springframework.web.client.RestClient;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GitHubApiIntegrationTest {
@@ -59,10 +62,16 @@ class GitHubApiIntegrationTest {
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withHeader("Content-Type", "application/json")
+                        .withFixedDelay(1000)
                         .withBody("""
                                 [
                                     {
                                         "name": "repo1",
+                                        "owner": {"login": "testuser"},
+                                        "fork": false
+                                    },
+                                    {
+                                        "name": "repo2",
                                         "owner": {"login": "testuser"},
                                         "fork": false
                                     },
@@ -78,6 +87,7 @@ class GitHubApiIntegrationTest {
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withHeader("Content-Type", "application/json")
+                        .withFixedDelay(1000)
                         .withBody("""
                                 [
                                     {
@@ -91,21 +101,59 @@ class GitHubApiIntegrationTest {
                                 ]
                                 """)));
 
+        stubFor(WireMock.get(urlEqualTo("/repos/testuser/repo2/branches"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withFixedDelay(1000)
+                        .withBody("""
+                                [
+                                    {
+                                        "name": "main",
+                                        "commit": {"sha": "ghi789"}
+                                    }
+                                ]
+                                """)));
+
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+
         List<GitHubRepository> repositories = restClient.get()
                 .uri("/api/users/testuser/repositories")
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
 
-        assertThat(repositories).hasSize(1);
+        stopWatch.stop();
+        long totalTimeMillis = stopWatch.getTime();
 
-        GitHubRepository repo = repositories.get(0);
-        assertThat(repo.name()).isEqualTo("repo1");
-        assertThat(repo.owner().login()).isEqualTo("testuser");
-        assertThat(repo.branches()).hasSize(2);
-        assertThat(repo.branches().get(0).name()).isEqualTo("main");
-        assertThat(repo.branches().get(0).commit().sha()).isEqualTo("abc123");
-        assertThat(repo.branches().get(1).name()).isEqualTo("develop");
-        assertThat(repo.branches().get(1).commit().sha()).isEqualTo("def456");
+        WireMock.verify(3, getRequestedFor(urlMatching(".*")));
+
+        assertThat(totalTimeMillis)
+                .as("Total time should be between 2000-3000 ms")
+                .isGreaterThanOrEqualTo(2000)
+                .isLessThan(3000);
+
+        assertThat(repositories).hasSize(2);
+
+        GitHubRepository repo1 = repositories.stream()
+                .filter(r -> r.name().equals("repo1"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(repo1.owner().login()).isEqualTo("testuser");
+        assertThat(repo1.branches()).hasSize(2);
+        assertThat(repo1.branches().get(0).name()).isEqualTo("main");
+        assertThat(repo1.branches().get(0).commit().sha()).isEqualTo("abc123");
+        assertThat(repo1.branches().get(1).name()).isEqualTo("develop");
+        assertThat(repo1.branches().get(1).commit().sha()).isEqualTo("def456");
+
+        GitHubRepository repo2 = repositories.stream()
+                .filter(r -> r.name().equals("repo2"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(repo2.owner().login()).isEqualTo("testuser");
+        assertThat(repo2.branches()).hasSize(1);
+        assertThat(repo2.branches().get(0).name()).isEqualTo("main");
+        assertThat(repo2.branches().get(0).commit().sha()).isEqualTo("ghi789");
     }
 
     @Test

@@ -21,6 +21,7 @@ repositories {
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-restclient")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
+	implementation("org.apache.commons:commons-lang3:3.14.0")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.wiremock:wiremock-standalone:3.10.0")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")

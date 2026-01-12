@@ -14,7 +14,7 @@ class GitHubService {
     }
 
     List<GitHubRepository> getUserRepositories(String username) {
-        return gitHubClient.getRepositories(username).stream()
+        return gitHubClient.getRepositories(username).parallelStream()
                 .filter(repo -> !repo.fork())
                 .map(repo -> new GitHubRepository(
                         repo.name(),
